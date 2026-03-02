@@ -1,24 +1,56 @@
-import { DarkTheme, DefaultTheme, ThemeProvider } from '@react-navigation/native';
-import { Stack } from 'expo-router';
-import { StatusBar } from 'expo-status-bar';
-import 'react-native-reanimated';
+import { DarkTheme, ThemeProvider } from "@react-navigation/native";
+import { Stack } from "expo-router";
+import { StatusBar } from "expo-status-bar";
+import { useEffect } from "react";
+import "react-native-reanimated";
 
-import { useColorScheme } from '@/hooks/use-color-scheme';
+import { Palette } from "@/constants/theme";
+import { useAppStore } from "@/hooks/use-app-data";
 
 export const unstable_settings = {
-  anchor: '(tabs)',
+  anchor: "(tabs)",
+};
+
+const AppDarkTheme = {
+  ...DarkTheme,
+  colors: {
+    ...DarkTheme.colors,
+    background: Palette.bgDark,
+    card: Palette.navBg,
+    text: Palette.accent,
+    border: Palette.border,
+    primary: Palette.highlight,
+    notification: Palette.highlight,
+  },
 };
 
 export default function RootLayout() {
-  const colorScheme = useColorScheme();
+  // Initialize Zustand store (load from AsyncStorage) once on app start
+  const initialize = useAppStore((s) => s.initialize);
+  useEffect(() => {
+    initialize();
+  }, []);
 
   return (
-    <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
+    <ThemeProvider value={AppDarkTheme}>
       <Stack>
         <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-        <Stack.Screen name="modal" options={{ presentation: 'modal', title: 'Modal' }} />
+        <Stack.Screen
+          name="modal"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+          }}
+        />
+        <Stack.Screen
+          name="settings"
+          options={{
+            presentation: "modal",
+            headerShown: false,
+          }}
+        />
       </Stack>
-      <StatusBar style="auto" />
+      <StatusBar style="light" backgroundColor={Palette.bgDark} />
     </ThemeProvider>
   );
 }
