@@ -21,7 +21,7 @@ Log how you're feeling each day with:
 
 A customisable widget screen showing:
 | Widget | Description |
-|---|---|<option value="Đồng Nai">Đồng Nai</option>
+|---|---|
 | Daily Reflection | Rotating motivational quote |
 | Memory Cards | Swipeable deck of recent check-ins |
 | Weekly Recap | 7-day streak dots |
