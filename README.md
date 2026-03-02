@@ -1,50 +1,132 @@
-# Welcome to your Expo app 👋
+# Single
 
-This is an [Expo](https://expo.dev) project created with [`create-expo-app`](https://www.npmjs.com/package/create-expo-app).
+A personal journaling app built for people who embrace solo life. **Single** helps you check in with yourself daily — log your mood, write an insight, attach a photo or voice note, and reflect on how far you've come.
 
-## Get started
+Built with [Expo](https://expo.dev) and [React Native](https://reactnative.dev), running on iOS, Android, and web.
 
-1. Install dependencies
+---
 
-   ```bash
-   npm install
-   ```
+## Features
 
-2. Start the app
+### Daily Check-in
 
-   ```bash
-   npx expo start
-   ```
+Log how you're feeling each day with:
 
-In the output, you'll find options to open the app in a
+- **Mood** — choose from default moods (Peaceful, Energetic, Quiet, Reflective, Grateful, Lonely) or create your own
+- **Insight** — a free-text note or reflection
+- **Photo** — attach an image from your library or camera
+- **Voice note** — record and preview audio before saving
 
-- [development build](https://docs.expo.dev/develop/development-builds/introduction/)
-- [Android emulator](https://docs.expo.dev/workflow/android-studio-emulator/)
-- [iOS simulator](https://docs.expo.dev/workflow/ios-simulator/)
-- [Expo Go](https://expo.dev/go), a limited sandbox for trying out app development with Expo
+### Home Dashboard
 
-You can start developing by editing the files inside the **app** directory. This project uses [file-based routing](https://docs.expo.dev/router/introduction).
+A customisable widget screen showing:
+| Widget | Description |
+|---|---|<option value="Đồng Nai">Đồng Nai</option>
+| Daily Reflection | Rotating motivational quote |
+| Memory Cards | Swipeable deck of recent check-ins |
+| Weekly Recap | 7-day streak dots |
+| Streak & Media | Current streak + photo/audio counts |
+| Mood Breakdown | Bar chart of mood history |
+| Random Memory | Resurface a past check-in |
 
-## Get a fresh project
+### Journal / Explore
 
-When you're ready, run:
+Browse all past check-ins grouped by day. Filter by **All**, **Audio**, **Note**, **Photo**, or **Today**. Tap any card to view the full entry with photo and audio playback.
+
+### Settings
+
+- Set your journey start date
+- Add or remove custom moods
+- Toggle individual home widgets on/off
+- Reset all data
+
+---
+
+## Tech Stack
+
+| Layer       | Library                                  |
+| ----------- | ---------------------------------------- |
+| Framework   | Expo ~54 / React Native 0.81             |
+| Navigation  | Expo Router ~6 (file-based)              |
+| State       | Zustand ^5                               |
+| Persistence | AsyncStorage 2.2                         |
+| Audio       | expo-audio ~1.1                          |
+| Images      | expo-image-picker ~17, expo-image ~3     |
+| Animations  | react-native-reanimated ~4, Animated API |
+| Icons       | @expo/vector-icons (Ionicons)            |
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- [Node.js](https://nodejs.org) 18+
+- [Expo CLI](https://docs.expo.dev/get-started/installation/) — `npm install -g expo-cli`
+- iOS Simulator (macOS) or Android Emulator, or the **Expo Go** app on a physical device
+
+### Install & run
 
 ```bash
-npm run reset-project
+# Install dependencies
+npm install
+
+# Start the dev server
+npx expo start
 ```
 
-This command will move the starter code to the **app-example** directory and create a blank **app** directory where you can start developing.
+In the terminal output you'll see a QR code and options to open on:
 
-## Learn more
+- **iOS simulator** — press `i`
+- **Android emulator** — press `a`
+- **Web browser** — press `w`
+- **Physical device** — scan the QR code with Expo Go
 
-To learn more about developing your project with Expo, look at the following resources:
+### Platform-specific builds
 
-- [Expo documentation](https://docs.expo.dev/): Learn fundamentals, or go into advanced topics with our [guides](https://docs.expo.dev/guides).
-- [Learn Expo tutorial](https://docs.expo.dev/tutorial/introduction/): Follow a step-by-step tutorial where you'll create a project that runs on Android, iOS, and the web.
+```bash
+npm run android   # Android emulator
+npm run ios       # iOS simulator
+npm run web       # Browser
+```
 
-## Join the community
+---
 
-Join our community of developers creating universal apps.
+## Project Structure
 
-- [Expo on GitHub](https://github.com/expo/expo): View our open source platform and contribute.
-- [Discord community](https://chat.expo.dev): Chat with Expo users and ask questions.
+```
+app/
+  _layout.tsx          # Root layout & navigation setup
+  modal.tsx            # Check-in form (mood, note, photo, audio)
+  settings.tsx         # Settings screen
+  (tabs)/
+    _layout.tsx        # Bottom tab bar
+    index.tsx          # Home dashboard with widgets
+    explore.tsx        # Journal / browse past check-ins
+components/            # Shared UI components
+constants/
+  theme.ts             # Colour palette
+hooks/
+  use-app-data.ts      # Zustand store + AsyncStorage persistence
+assets/
+  images/              # App icons and splash images
+```
+
+---
+
+## Scripts
+
+| Command                 | Description                        |
+| ----------------------- | ---------------------------------- |
+| `npm start`             | Start Expo dev server              |
+| `npm run android`       | Run on Android emulator            |
+| `npm run ios`           | Run on iOS simulator               |
+| `npm run web`           | Run in browser                     |
+| `npm run lint`          | Lint with ESLint                   |
+| `npm run reset-project` | Clear starter code and start fresh |
+
+---
+
+## License
+
+MIT
