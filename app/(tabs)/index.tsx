@@ -1,6 +1,6 @@
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
-import React, { useCallback, useMemo, useRef, useState } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Animated,
   Dimensions,
@@ -138,6 +138,35 @@ export default function HomeScreen() {
   const hasBeforeDeck = deckPos > 0;
   const today = localDateStr();
 
+  // Count-up animation for streak
+  const [displayStreak, setDisplayStreak] = useState(0);
+  const streakTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  useEffect(() => {
+    if (streakTimerRef.current) clearInterval(streakTimerRef.current);
+    if (streak === 0) { setDisplayStreak(0); return; }
+    const steps = Math.min(streak, 30);
+    const interval = Math.max(16, Math.floor(700 / steps));
+    const step = Math.ceil(streak / steps);
+    let current = 0;
+    setDisplayStreak(0);
+    streakTimerRef.current = setInterval(() => {
+      current = Math.min(current + step, streak);
+      setDisplayStreak(current);
+      if (current >= streak && streakTimerRef.current) clearInterval(streakTimerRef.current);
+    }, interval);
+    return () => { if (streakTimerRef.current) clearInterval(streakTimerRef.current); };
+  }, [streak]);
+
+  // Flame pulse
+  const flameScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (streak === 0) return;
+    Animated.sequence([
+      Animated.timing(flameScale, { toValue: 1.5, duration: 200, useNativeDriver: true }),
+      Animated.spring(flameScale, { toValue: 1, useNativeDriver: true }),
+    ]).start();
+  }, [streak]);
+
   // Deck: card 0 = latest today entry (with add FAB) or empty add card;
   // then remaining entries newest first, capped at 10 total entries
   const todayLatest = todayCheckIns[0] ?? null;
@@ -226,7 +255,7 @@ export default function HomeScreen() {
               </Text>
               {streak > 0 && (
                 <View style={styles.compactStreak}>
-                  <Text style={styles.compactStreakText}>🔥 {streak}</Text>
+                  <Text style={styles.compactStreakText}>🔥 {displayStreak}</Text>
                 </View>
               )}
             </Animated.View>
@@ -262,8 +291,8 @@ export default function HomeScreen() {
               )}
               {streak > 0 && (
                 <View style={styles.streakBadge}>
-                  <Text style={styles.streakFire}>🔥</Text>
-                  <Text style={styles.streakText}>{streak} day streak</Text>
+                  <Animated.Text style={[styles.streakFire, { transform: [{ scale: flameScale }] }]}>🔥</Animated.Text>
+                  <Text style={styles.streakText}>{displayStreak} day streak</Text>
                 </View>
               )}
               {!data.startDate && (

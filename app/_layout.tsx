@@ -6,6 +6,7 @@ import "react-native-reanimated";
 
 import { Palette } from "@/constants/theme";
 import { useAppStore } from "@/hooks/use-app-data";
+import { initNotifications } from "@/hooks/use-notifications";
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -29,6 +30,7 @@ export default function RootLayout() {
   const initialize = useAppStore((s) => s.initialize);
   useEffect(() => {
     initialize();
+    initNotifications();
   }, []);
 
   return (

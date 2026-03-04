@@ -1,9 +1,36 @@
 import { Ionicons } from "@expo/vector-icons";
-import React, { useMemo, useState } from "react";
-import { Image, Pressable, StyleSheet, Text, View } from "react-native";
+import React, { useEffect, useMemo, useRef, useState } from "react";
+import { Animated, Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Palette } from "@/constants/theme";
 import { CheckIn, WidgetId, localDateStr } from "@/hooks/use-app-data";
+
+// ── Count-up hook ─────────────────────────────────────────────────────────────
+
+function useCountUp(target: number, duration = 800): number {
+  const [display, setDisplay] = useState(0);
+  const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  useEffect(() => {
+    if (timerRef.current) clearInterval(timerRef.current);
+    if (target === 0) { setDisplay(0); return; }
+    const steps = Math.min(target, 40); // cap at 40 ticks to avoid being too slow
+    const interval = Math.max(16, Math.floor(duration / steps));
+    const step = Math.ceil(target / steps);
+    let current = 0;
+    setDisplay(0);
+    timerRef.current = setInterval(() => {
+      current = Math.min(current + step, target);
+      setDisplay(current);
+      if (current >= target) {
+        if (timerRef.current) clearInterval(timerRef.current);
+      }
+    }, interval);
+    return () => { if (timerRef.current) clearInterval(timerRef.current); };
+  }, [target]);
+
+  return display;
+}
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -332,20 +359,35 @@ function WeeklyRecap({ checkInList }: { checkInList: CheckIn[] }) {
 }
 
 function StreakCard({ streak, best }: { streak: number; best: number }) {
+  const displayStreak = useCountUp(streak);
+  const displayBest = useCountUp(best, 1000);
+
+  // Flame pulse animation
+  const flameScale = useRef(new Animated.Value(1)).current;
+  useEffect(() => {
+    if (streak === 0) return;
+    Animated.sequence([
+      Animated.timing(flameScale, { toValue: 1.45, duration: 180, useNativeDriver: true }),
+      Animated.spring(flameScale, { toValue: 1, useNativeDriver: true }),
+    ]).start();
+  }, [streak]);
+
   return (
     <View style={[w.miniCard, { flex: 1 }]}>
       <View style={w.miniCardHeader}>
-        <Ionicons name="flame-outline" size={13} color={Palette.highlight} />
+        <Animated.View style={{ transform: [{ scale: flameScale }] }}>
+          <Ionicons name="flame-outline" size={13} color={Palette.highlight} />
+        </Animated.View>
         <Text style={w.miniCardLabel}>STREAK</Text>
       </View>
       <View style={w.streakRow}>
         <View style={w.streakItem}>
-          <Text style={w.streakNum}>{streak}</Text>
+          <Text style={w.streakNum}>{displayStreak}</Text>
           <Text style={w.streakSub}>current</Text>
         </View>
         <View style={w.streakDivider} />
         <View style={w.streakItem}>
-          <Text style={w.streakNum}>{best}</Text>
+          <Text style={w.streakNum}>{displayBest}</Text>
           <Text style={w.streakSub}>best</Text>
         </View>
       </View>

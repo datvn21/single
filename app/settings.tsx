@@ -22,6 +22,13 @@ import {
   localDateStr,
   useAppData,
 } from "@/hooks/use-app-data";
+import {
+  NotificationSettings,
+  cancelDailyNotification,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  scheduleDailyNotification,
+} from "@/hooks/use-notifications";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -75,6 +82,61 @@ export default function SettingsScreen() {
   const [newMood, setNewMood] = useState("");
   const [localWidgets, setLocalWidgets] =
     useState<WidgetConfig[]>(widgetConfig);
+
+  // Notification settings
+  const [notifEnabled, setNotifEnabled] = useState(false);
+  const [notifHour, setNotifHour] = useState(21);
+  const [notifMinute, setNotifMinute] = useState(0);
+
+  useEffect(() => {
+    loadNotificationSettings().then((s) => {
+      setNotifEnabled(s.enabled);
+      setNotifHour(s.hour);
+      setNotifMinute(s.minute);
+    });
+  }, []);
+
+  const handleNotifToggle = async (val: boolean) => {
+    setNotifEnabled(val);
+    const settings: NotificationSettings = {
+      enabled: val,
+      hour: notifHour,
+      minute: notifMinute,
+    };
+    await saveNotificationSettings(settings);
+    if (val) {
+      const ok = await scheduleDailyNotification(notifHour, notifMinute);
+      if (!ok) {
+        setNotifEnabled(false);
+        await saveNotificationSettings({ ...settings, enabled: false });
+        Alert.alert(
+          "Permission denied",
+          "Please allow notifications in your device settings.",
+        );
+      }
+    } else {
+      await cancelDailyNotification();
+    }
+  };
+
+  const handleNotifTimeChange = async (
+    field: "hour" | "minute",
+    value: number,
+  ) => {
+    const newHour = field === "hour" ? value : notifHour;
+    const newMinute = field === "minute" ? value : notifMinute;
+    if (field === "hour") setNotifHour(value);
+    else setNotifMinute(value);
+    const settings: NotificationSettings = {
+      enabled: notifEnabled,
+      hour: newHour,
+      minute: newMinute,
+    };
+    await saveNotificationSettings(settings);
+    if (notifEnabled) {
+      await scheduleDailyNotification(newHour, newMinute);
+    }
+  };
 
   const now = new Date();
   const [year, setYear] = useState(now.getFullYear());
@@ -224,6 +286,118 @@ export default function SettingsScreen() {
               <Ionicons name="arrow-forward" size={18} color={Palette.bgDark} />
             </Pressable>
           </View>
+          {/* Notification reminder */}
+          <View style={styles.card}>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.cardTitle}>Daily reminder</Text>
+                <Text style={styles.cardSubtitle}>
+                  Get a nudge to check in each day
+                </Text>
+              </View>
+              <Switch
+                value={notifEnabled}
+                onValueChange={handleNotifToggle}
+                trackColor={{
+                  false: Palette.surfaceDark,
+                  true: Palette.highlight,
+                }}
+                thumbColor={Palette.accent}
+              />
+            </View>
+            {notifEnabled && (
+              <View style={styles.notifTimeRow}>
+                <View style={styles.notifTimeBlock}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.notifStepBtn,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    hitSlop={8}
+                    onPress={() =>
+                      handleNotifTimeChange(
+                        "hour",
+                        notifHour === 23 ? 0 : notifHour + 1,
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={18}
+                      color={Palette.secondary}
+                    />
+                  </Pressable>
+                  <Text style={styles.notifTimeValue}>
+                    {String(notifHour).padStart(2, "0")}
+                  </Text>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.notifStepBtn,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    hitSlop={8}
+                    onPress={() =>
+                      handleNotifTimeChange(
+                        "hour",
+                        notifHour === 0 ? 23 : notifHour - 1,
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={18}
+                      color={Palette.secondary}
+                    />
+                  </Pressable>
+                </View>
+                <Text style={styles.notifTimeSep}>:</Text>
+                <View style={styles.notifTimeBlock}>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.notifStepBtn,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    hitSlop={8}
+                    onPress={() =>
+                      handleNotifTimeChange(
+                        "minute",
+                        notifMinute >= 55 ? 0 : notifMinute + 5,
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name="chevron-up"
+                      size={18}
+                      color={Palette.secondary}
+                    />
+                  </Pressable>
+                  <Text style={styles.notifTimeValue}>
+                    {String(notifMinute).padStart(2, "0")}
+                  </Text>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.notifStepBtn,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                    hitSlop={8}
+                    onPress={() =>
+                      handleNotifTimeChange(
+                        "minute",
+                        notifMinute === 0 ? 55 : notifMinute - 5,
+                      )
+                    }
+                  >
+                    <Ionicons
+                      name="chevron-down"
+                      size={18}
+                      color={Palette.secondary}
+                    />
+                  </Pressable>
+                </View>
+              </View>
+            )}
+          </View>
+
           {/* Widget management */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Widgets</Text>
@@ -610,5 +784,42 @@ const styles = StyleSheet.create({
     fontSize: 12,
     color: `${Palette.secondary}70`,
     marginTop: 4,
+  },
+  notifTimeRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+    gap: 4,
+    marginTop: 12,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: Palette.border,
+  },
+  notifTimeBlock: {
+    alignItems: "center",
+    gap: 4,
+  },
+  notifStepBtn: {
+    width: 40,
+    height: 36,
+    borderRadius: 10,
+    backgroundColor: `${Palette.primary}40`,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+  notifTimeValue: {
+    fontSize: 34,
+    fontWeight: "200",
+    color: Palette.accent,
+    minWidth: 52,
+    textAlign: "center",
+    letterSpacing: 2,
+  },
+  notifTimeSep: {
+    fontSize: 30,
+    fontWeight: "200",
+    color: `${Palette.secondary}60`,
+    marginBottom: 4,
+    paddingHorizontal: 4,
   },
 });

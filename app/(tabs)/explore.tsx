@@ -102,7 +102,7 @@ export default function HistoryScreen() {
   const { data, checkInList, daysSingle, streak, deleteCheckIn } = useAppData();
   const [selected, setSelected] = useState<CheckIn | null>(null);
   const [photoAspect, setPhotoAspect] = useState(4 / 3);
-  const [showSaveOverlay, setShowSaveOverlay] = useState(false);
+
   const playerRef = useRef<AudioPlayer | null>(null);
   const [isPlaying, setIsPlaying] = useState(false);
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
@@ -112,7 +112,6 @@ export default function HistoryScreen() {
 
   useEffect(() => {
     setPhotoAspect(4 / 3);
-    setShowSaveOverlay(false);
   }, [selected]);
 
   const saveImage = async (uri: string) => {
@@ -337,13 +336,7 @@ export default function HistoryScreen() {
         <View style={styles.modalBg}>
           <Pressable
             style={StyleSheet.absoluteFill}
-            onPress={() => {
-              if (showSaveOverlay) {
-                setShowSaveOverlay(false);
-              } else {
-                setSelected(null);
-              }
-            }}
+            onPress={() => setSelected(null)}
           />
           <View style={styles.detailCard}>
             <Pressable
@@ -373,20 +366,9 @@ export default function HistoryScreen() {
               />
             </Pressable>
 
-            <Pressable
-              style={styles.detailClose}
-              onPress={() => setSelected(null)}
-            >
-              <Ionicons name="close" size={18} color={Palette.accent} />
-            </Pressable>
-
             <View style={styles.detailPhotoWrap}>
               {selected?.photoUri ? (
-                <Pressable
-                  onLongPress={() => setShowSaveOverlay(true)}
-                  delayLongPress={400}
-                  style={{ position: "relative" }}
-                >
+                <View style={{ position: "relative" }}>
                   <Image
                     source={{ uri: selected.photoUri }}
                     style={[styles.detailImage, { aspectRatio: photoAspect }]}
@@ -396,28 +378,17 @@ export default function HistoryScreen() {
                       if (width && height) setPhotoAspect(width / height);
                     }}
                   />
-                  {showSaveOverlay && (
-                    <View style={styles.saveOverlay}>
-                      <Pressable
-                        style={styles.saveBtn}
-                        onPress={() => saveImage(selected.photoUri!)}
-                      >
-                        <Ionicons
-                          name="download-outline"
-                          size={18}
-                          color="#fff"
-                        />
-                        <Text style={styles.saveBtnText}>Save Image</Text>
-                      </Pressable>
-                      <Pressable
-                        style={styles.saveCancelBtn}
-                        onPress={() => setShowSaveOverlay(false)}
-                      >
-                        <Text style={styles.saveCancelText}>Cancel</Text>
-                      </Pressable>
-                    </View>
-                  )}
-                </Pressable>
+                  <Pressable
+                    style={({ pressed }) => [
+                      styles.photoSaveBtn,
+                      pressed && { opacity: 0.7 },
+                    ]}
+                    onPress={() => saveImage(selected.photoUri!)}
+                    hitSlop={8}
+                  >
+                    <Ionicons name="download-outline" size={16} color="#fff" />
+                  </Pressable>
+                </View>
               ) : (
                 <View style={styles.detailNoPhoto}>
                   <Text style={styles.detailNoPhotoMood}>{selected?.mood}</Text>
@@ -631,15 +602,15 @@ const styles = StyleSheet.create({
     borderColor: Palette.surfaceDark,
     overflow: "hidden",
   },
-  detailClose: {
+  photoSaveBtn: {
     position: "absolute",
-    top: 24,
-    right: 24,
-    zIndex: 20,
+    top: 12,
+    right: 12,
+    zIndex: 10,
     width: 32,
     height: 32,
     borderRadius: 16,
-    backgroundColor: "rgba(5,31,32,0.6)",
+    backgroundColor: "rgba(0,0,0,0.55)",
     alignItems: "center",
     justifyContent: "center",
   },
@@ -668,48 +639,7 @@ const styles = StyleSheet.create({
     backgroundColor: Palette.primary,
   },
   detailNoPhotoMood: { fontSize: 52 },
-  saveOverlay: {
-    ...StyleSheet.absoluteFillObject,
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 10,
-  },
-  saveBtn: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 8,
-    backgroundColor: "rgba(20,20,20,0.88)",
-    paddingHorizontal: 22,
-    paddingVertical: 12,
-    borderRadius: 999,
-    shadowColor: "#000",
-    shadowOpacity: 0.6,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 10,
-  },
-  saveBtnText: {
-    color: "#fff",
-    fontSize: 14,
-    fontWeight: "700",
-    letterSpacing: 0.3,
-  },
-  saveCancelBtn: {
-    paddingHorizontal: 22,
-    paddingVertical: 8,
-    backgroundColor: "rgba(20,20,20,0.65)",
-    borderRadius: 999,
-    shadowColor: "#000",
-    shadowOpacity: 0.4,
-    shadowRadius: 8,
-    shadowOffset: { width: 0, height: 2 },
-    elevation: 6,
-  },
-  saveCancelText: {
-    color: "rgba(255,255,255,0.85)",
-    fontSize: 13,
-    fontWeight: "500",
-  },
+
   detailBody: {
     paddingHorizontal: 20,
     paddingBottom: 22,
