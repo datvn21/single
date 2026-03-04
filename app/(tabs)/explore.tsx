@@ -125,7 +125,6 @@ export default function HistoryScreen() {
         return;
       }
       await MediaLibrary.saveToLibraryAsync(uri);
-      setShowSaveOverlay(false);
       Alert.alert("Saved", "Image saved to your photo library.");
     } catch {
       Alert.alert("Error", "Could not save image.");
