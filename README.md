@@ -127,6 +127,33 @@ assets/
 
 ---
 
+## Changelog
+
+### 2026-03-04
+
+#### Fix — Timezone: ngày đổi đúng lúc 0h thay vì 7h sáng
+- Thêm helper `localDateStr()` sử dụng giờ địa phương (`getFullYear/Month/Date`) thay vì UTC (`toISOString`)
+- Thay thế toàn bộ 11 chỗ dùng `.toISOString().slice(0, 10)` trong `hooks/use-app-data.ts`, `components/home-widgets.tsx`, `app/settings.tsx`, `app/modal.tsx`, `app/(tabs)/index.tsx`, `app/(tabs)/explore.tsx`
+
+#### Feature — Daily notification (nhắc check-in hàng ngày)
+- Thêm `hooks/use-notifications.ts`: quản lý xin quyền, lên lịch / hủy notification lặp lại hàng ngày, lưu settings vào AsyncStorage
+- `app.json`: thêm plugin `expo-notifications`
+- `app/_layout.tsx`: gọi `initNotifications()` khi app khởi động để tự khôi phục lịch
+- `app/settings.tsx`: thêm card **Daily reminder** — toggle bật/tắt + bộ chọn giờ:phút (phút nhảy 5)
+- Cập nhật `app/(tabs)/index.tsx` và `app/(tabs)/explore.tsx` để dùng `localDateStr`
+
+#### UX — Nút lưu ảnh thay nút X trong detail view (Explore)
+- Bỏ nút X (close) ở góc trên phải detail card
+- Bỏ cơ chế long-press + save overlay
+- Thêm nút download nhỏ trực tiếp góc trên phải của ảnh — nhấn 1 lần lưu ngay vào thư viện
+- Đóng detail vẫn bằng cách tap ra ngoài
+
+#### Feature — Streak count-up animation
+- `components/home-widgets.tsx`: thêm hook `useCountUp()`, số current / best đếm từng nhịp khi render; flame icon pulse khi streak thay đổi
+- `app/(tabs)/index.tsx`: streak badge trên header compact và dưới số ngày đều đếm lên từng nhịp; flame emoji pulse via `Animated.Text`
+
+---
+
 ## License
 
 MIT
