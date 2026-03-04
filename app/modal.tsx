@@ -29,7 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Palette } from "@/constants/theme";
-import { useAppData } from "@/hooks/use-app-data";
+import { localDateStr, useAppData } from "@/hooks/use-app-data";
 
 function formatRecSecs(s: number) {
   const m = Math.floor(s / 60);
@@ -187,7 +187,7 @@ export default function ModalScreen() {
     }
     setSaving(true);
     try {
-      const today = new Date().toISOString().slice(0, 10);
+      const today = localDateStr();
       const createdAt = Date.now();
       await saveCheckIn({
         id: `${today}_${createdAt}`,

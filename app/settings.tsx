@@ -16,7 +16,12 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Palette } from "@/constants/theme";
-import { WidgetConfig, WidgetId, useAppData } from "@/hooks/use-app-data";
+import {
+  WidgetConfig,
+  WidgetId,
+  localDateStr,
+  useAppData,
+} from "@/hooks/use-app-data";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -91,7 +96,7 @@ export default function SettingsScreen() {
 
   const handleSave = async () => {
     const dateStr = `${year}-${pad(month)}-${pad(safeDay)}`;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = localDateStr();
     if (dateStr > today) {
       Alert.alert("Invalid date", "Start date cannot be in the future.");
       return;

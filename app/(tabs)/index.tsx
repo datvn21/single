@@ -20,7 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 import { AppHeader } from "@/components/app-header";
 import { HomeWidget } from "@/components/home-widgets";
 import { Palette } from "@/constants/theme";
-import { CheckIn, useAppData } from "@/hooks/use-app-data";
+import { CheckIn, localDateStr, useAppData } from "@/hooks/use-app-data";
 
 const { width: SCREEN_W } = Dimensions.get("window");
 
@@ -121,8 +121,8 @@ function formatStartDate(dateStr: string | null) {
 }
 
 function formatDay(dateStr: string) {
-  const today = new Date().toISOString().slice(0, 10);
-  const yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  const today = localDateStr();
+  const yesterday = localDateStr(new Date(Date.now() - 86400000));
   if (dateStr === today) return "Today";
   if (dateStr === yesterday) return "Yesterday";
   const d = new Date(dateStr + "T00:00:00");
@@ -136,7 +136,7 @@ export default function HomeScreen() {
   const enabledWidgets = widgetConfig.filter((w) => w.enabled);
   const deckPos = enabledWidgets.findIndex((w) => w.id === "deck");
   const hasBeforeDeck = deckPos > 0;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   // Deck: card 0 = latest today entry (with add FAB) or empty add card;
   // then remaining entries newest first, capped at 10 total entries

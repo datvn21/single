@@ -55,8 +55,15 @@ export interface AppData {
 //  Helpers
 const STORAGE_KEY = "single_app_data";
 
+export function localDateStr(date: Date = new Date()): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function todayStr(): string {
-  return new Date().toISOString().slice(0, 10);
+  return localDateStr();
 }
 
 function daysBetween(from: string, to: string): number {
@@ -75,7 +82,7 @@ function calcStreak(checkIns: Record<string, CheckIn>): number {
   let streak = 0;
   const cursor = new Date(todayStr());
   while (true) {
-    const key = cursor.toISOString().slice(0, 10);
+    const key = localDateStr(cursor);
     if (dates.has(key)) {
       streak++;
       cursor.setDate(cursor.getDate() - 1);

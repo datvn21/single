@@ -3,7 +3,7 @@ import React, { useMemo, useState } from "react";
 import { Image, Pressable, StyleSheet, Text, View } from "react-native";
 
 import { Palette } from "@/constants/theme";
-import { CheckIn, WidgetId } from "@/hooks/use-app-data";
+import { CheckIn, WidgetId, localDateStr } from "@/hooks/use-app-data";
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -44,7 +44,7 @@ function getWeekDays(): { date: string; label: string }[] {
   return ["M", "T", "W", "T", "F", "S", "S"].map((label, i) => {
     const d = new Date(monday);
     d.setDate(monday.getDate() + i);
-    return { date: d.toISOString().slice(0, 10), label };
+    return { date: localDateStr(d), label };
   });
 }
 
@@ -292,7 +292,7 @@ const w = StyleSheet.create({
 function WeeklyRecap({ checkInList }: { checkInList: CheckIn[] }) {
   const week = getWeekDays();
   const datesWithEntry = new Set(checkInList.map((ci) => ci.date));
-  const todayDate = new Date().toISOString().slice(0, 10);
+  const todayDate = localDateStr();
   return (
     <View style={w.weekWrap}>
       <View style={[w.cardHeader, { marginBottom: 12 }]}>

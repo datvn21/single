@@ -20,7 +20,7 @@ import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppHeader } from "@/components/app-header";
 import { Palette } from "@/constants/theme";
-import { CheckIn, useAppData } from "@/hooks/use-app-data";
+import { CheckIn, localDateStr, useAppData } from "@/hooks/use-app-data";
 
 type FilterKey = "all" | "audio" | "note" | "photo" | "today";
 
@@ -62,10 +62,8 @@ function groupByDay(
     if (!map[ci.date]) map[ci.date] = [];
     map[ci.date].push(ci);
   }
-  const todayStr = new Date().toISOString().slice(0, 10);
-  const yesterdayStr = new Date(Date.now() - 86400000)
-    .toISOString()
-    .slice(0, 10);
+  const todayStr = localDateStr();
+  const yesterdayStr = localDateStr(new Date(Date.now() - 86400000));
   return Object.entries(map)
     .sort(([a], [b]) => b.localeCompare(a))
     .map(([date, items]) => {
@@ -110,7 +108,7 @@ export default function HistoryScreen() {
   const [audioDuration, setAudioDuration] = useState<number | null>(null);
   const [activeFilter, setActiveFilter] = useState<FilterKey>("all");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const today = localDateStr();
 
   useEffect(() => {
     setPhotoAspect(4 / 3);
