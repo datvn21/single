@@ -1,5 +1,6 @@
 import { DarkTheme, ThemeProvider } from "@react-navigation/native";
 import { Stack } from "expo-router";
+import * as SplashScreen from "expo-splash-screen";
 import { StatusBar } from "expo-status-bar";
 import { useEffect } from "react";
 import "react-native-reanimated";
@@ -7,6 +8,8 @@ import "react-native-reanimated";
 import { Palette } from "@/constants/theme";
 import { useAppStore } from "@/hooks/use-app-data";
 import { initNotifications } from "@/hooks/use-notifications";
+
+SplashScreen.preventAutoHideAsync();
 
 export const unstable_settings = {
   anchor: "(tabs)",
@@ -28,10 +31,18 @@ const AppDarkTheme = {
 export default function RootLayout() {
   // Initialize Zustand store (load from AsyncStorage) once on app start
   const initialize = useAppStore((s) => s.initialize);
+  const loading = useAppStore((s) => s.loading);
+
   useEffect(() => {
     initialize();
     initNotifications();
   }, []);
+
+  useEffect(() => {
+    if (!loading) {
+      SplashScreen.hideAsync();
+    }
+  }, [loading]);
 
   return (
     <ThemeProvider value={AppDarkTheme}>

@@ -2,14 +2,12 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import React, {
   useCallback,
-  useEffect,
   useMemo,
   useRef,
   useState,
 } from "react";
 import {
   Animated,
-  Dimensions,
   FlatList,
   Image,
   NativeScrollEvent,
@@ -20,15 +18,16 @@ import {
   StyleSheet,
   Text,
   View,
+  useWindowDimensions,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { AppHeader } from "@/components/app-header";
-import { HomeWidget } from "@/components/home-widgets";
+import { HomeWidget, useCountUp } from "@/components/home-widgets";
 import { Palette } from "@/constants/theme";
 import { CheckIn, localDateStr, useAppData } from "@/hooks/use-app-data";
 
-const { width: SCREEN_W } = Dimensions.get("window");
+
 
 const QUOTES = [
   {
@@ -107,12 +106,9 @@ const QUOTES = [
   },
 ];
 
-// Card takes up most of screen with a sliver of the next card peeking
+// Card layout constants are computed inside the component with useWindowDimensions
 const CARD_SIDE_PAD = 20;
 const CARD_GAP = 12;
-const CARD_W = SCREEN_W - CARD_SIDE_PAD * 2;
-const CARD_H = Math.round(CARD_W * (5 / 4));
-const SNAP_INTERVAL = CARD_W + CARD_GAP;
 
 type DeckItem = { type: "new" } | { type: "entry"; checkIn: CheckIn };
 
@@ -144,44 +140,15 @@ export default function HomeScreen() {
   const hasBeforeDeck = deckPos > 0;
   const today = localDateStr();
 
-  // Count-up animation for streak
-  const [displayStreak, setDisplayStreak] = useState(0);
-  const streakTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  useEffect(() => {
-    if (streakTimerRef.current) clearInterval(streakTimerRef.current);
-    if (streak === 0) {
-      setDisplayStreak(0);
-      return;
-    }
-    const steps = Math.min(streak, 30);
-    const interval = Math.max(16, Math.floor(700 / steps));
-    const step = Math.ceil(streak / steps);
-    let current = 0;
-    setDisplayStreak(0);
-    streakTimerRef.current = setInterval(() => {
-      current = Math.min(current + step, streak);
-      setDisplayStreak(current);
-      if (current >= streak && streakTimerRef.current)
-        clearInterval(streakTimerRef.current);
-    }, interval);
-    return () => {
-      if (streakTimerRef.current) clearInterval(streakTimerRef.current);
-    };
-  }, [streak]);
+  // Responsive card dimensions
+  const { width: screenW } = useWindowDimensions();
+  const cardW = screenW - CARD_SIDE_PAD * 2;
+  const cardH = Math.round(cardW * (5 / 4));
+  const snapInterval = cardW + CARD_GAP;
 
-  // Flame pulse
-  const flameScale = useRef(new Animated.Value(1)).current;
-  useEffect(() => {
-    if (streak === 0) return;
-    Animated.sequence([
-      Animated.timing(flameScale, {
-        toValue: 1.5,
-        duration: 200,
-        useNativeDriver: true,
-      }),
-      Animated.spring(flameScale, { toValue: 1, useNativeDriver: true }),
-    ]).start();
-  }, [streak]);
+  // Count-up animation for streak (reuse shared hook)
+  const displayStreak = useCountUp(streak, 700);
+
 
   // Deck: card 0 = latest today entry (with add FAB) or empty add card;
   // then remaining entries newest first, capped at 10 total entries
@@ -240,9 +207,9 @@ export default function HomeScreen() {
   }, []);
 
   const onScroll = useCallback((e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SNAP_INTERVAL);
+    const idx = Math.round(e.nativeEvent.contentOffset.x / snapInterval);
     setActiveIndex(idx);
-  }, []);
+  }, [snapInterval]);
 
   const handleCheckIn = useCallback(() => {
     router.push("/modal");
@@ -309,14 +276,7 @@ export default function HomeScreen() {
               )}
               {streak > 0 && (
                 <View style={styles.streakBadge}>
-                  <Animated.Text
-                    style={[
-                      styles.streakFire,
-                      { transform: [{ scale: flameScale }] },
-                    ]}
-                  >
-                    🔥
-                  </Animated.Text>
+                  <Text style={styles.streakFire}>🔥</Text>
                   <Text style={styles.streakText}>
                     {displayStreak} day streak
                   </Text>
@@ -363,7 +323,7 @@ export default function HomeScreen() {
 
                 case "deck":
                   return (
-                    <View key="deck" style={styles.deckWrapper}>
+                    <View key="deck" style={[styles.deckWrapper, { height: cardH + 28 }]}>
                       <FlatList
                         ref={flatRef}
                         data={deckData}
@@ -372,7 +332,7 @@ export default function HomeScreen() {
                         }
                         horizontal
                         pagingEnabled={false}
-                        snapToInterval={SNAP_INTERVAL}
+                        snapToInterval={snapInterval}
                         snapToAlignment="start"
                         decelerationRate="fast"
                         showsHorizontalScrollIndicator={false}
@@ -382,7 +342,7 @@ export default function HomeScreen() {
                         renderItem={({ item }) => {
                           if (item.type === "new") {
                             return (
-                              <View style={styles.deckCard}>
+                              <View style={[styles.deckCard, { width: cardW, height: cardH }]}>
                                 <View style={styles.todayBadge}>
                                   <Text style={styles.todayBadgeText}>
                                     Today
@@ -416,7 +376,7 @@ export default function HomeScreen() {
                           const isToday = ci.date === today;
                           return (
                             <Pressable
-                              style={styles.deckCard}
+                              style={[styles.deckCard, { width: cardW, height: cardH }]}
                               onPress={() => router.push("/(tabs)/explore")}
                             >
                               {ci.photoUri ? (
@@ -645,14 +605,12 @@ const styles = StyleSheet.create({
   // ── Deck ──────────────────────────────────────────────────────────────────
   // Break out of parent ScrollView's paddingHorizontal so the FlatList
   // occupies the full screen width and snap math aligns correctly.
-  deckWrapper: { marginBottom: 24, height: CARD_H + 28, marginHorizontal: -16 },
+  deckWrapper: { marginBottom: 24, marginHorizontal: -16 },
   deckRow: {
     paddingHorizontal: CARD_SIDE_PAD,
     gap: CARD_GAP,
   },
   deckCard: {
-    width: CARD_W,
-    height: CARD_H,
     borderRadius: 24,
     overflow: "hidden",
     backgroundColor: Palette.surfaceDark,

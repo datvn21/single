@@ -1,6 +1,17 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import React from "react";
+import { useMemo } from "react";
 import { create } from "zustand";
+
+import {
+  computeSmartReminderTime,
+  loadNotificationSettings,
+  saveNotificationSettings,
+  scheduleDailyNotification,
+} from "@/hooks/use-notifications";
+import {
+  saveWidgetData,
+  requestWidgetUpdate,
+} from "@/hooks/use-widget-data";
 
 //  Types
 export type Mood = string;
@@ -39,6 +50,7 @@ export interface CheckIn {
   date: string; // YYYY-MM-DD
   mood: Mood;
   insight: string;
+  tags: string[];
   photoUri?: string;
   audioUri?: string;
   createdAt: number; // ms timestamp
@@ -62,9 +74,7 @@ export function localDateStr(date: Date = new Date()): string {
   return `${y}-${m}-${d}`;
 }
 
-function todayStr(): string {
-  return localDateStr();
-}
+
 
 function daysBetween(from: string, to: string): number {
   return Math.floor(
@@ -80,7 +90,7 @@ function calcStreak(checkIns: Record<string, CheckIn>): number {
       .map((ci) => ci.date),
   );
   let streak = 0;
-  const cursor = new Date(todayStr());
+  const cursor = new Date(localDateStr());
   while (true) {
     const key = localDateStr(cursor);
     if (dates.has(key)) {
@@ -120,20 +130,36 @@ async function persistStore(
 function migrateCheckIns(
   raw: Record<string, unknown>,
 ): Record<string, CheckIn> {
+  const normalizeTags = (value: unknown): string[] =>
+    Array.isArray(value)
+      ? value
+          .filter((t): t is string => typeof t === "string")
+          .map((t) => t.trim())
+          .filter(Boolean)
+      : [];
+
   const result: Record<string, CheckIn> = {};
   for (const [key, value] of Object.entries(raw)) {
     if (!value || typeof value !== "object") continue;
     const ci = value as Record<string, unknown>;
     if (typeof ci.id === "string" && ci.id) {
       // Already migrated
-      result[ci.id] = ci as unknown as CheckIn;
+      result[ci.id] = {
+        ...(ci as unknown as CheckIn),
+        tags: normalizeTags(ci.tags),
+      };
     } else {
       // Old format: key was the date
       const date = typeof ci.date === "string" ? ci.date : key;
       const createdAt =
         typeof ci.createdAt === "number" ? ci.createdAt : Date.now();
       const id = `${date}_${createdAt}`;
-      result[id] = { ...(ci as unknown as CheckIn), id, date };
+      result[id] = {
+        ...(ci as unknown as CheckIn),
+        id,
+        date,
+        tags: normalizeTags(ci.tags),
+      };
     }
   }
   return result;
@@ -157,6 +183,7 @@ interface AppStore {
     checkIn: Omit<CheckIn, "id"> & { id?: string },
   ) => Promise<void>;
   deleteCheckIn: (id: string) => Promise<void>;
+  replaceAllData: (nextData: AppData) => Promise<void>;
 }
 
 export const useAppStore = create<AppStore>((set, get) => ({
@@ -266,7 +293,14 @@ export const useAppStore = create<AppStore>((set, get) => ({
   saveCheckIn: async (checkIn) => {
     const createdAt = checkIn.createdAt ?? Date.now();
     const id = checkIn.id ?? `${checkIn.date}_${createdAt}`;
-    const entry: CheckIn = { ...checkIn, id, createdAt } as CheckIn;
+    const entry: CheckIn = {
+      ...checkIn,
+      id,
+      createdAt,
+      tags: Array.isArray(checkIn.tags)
+        ? checkIn.tags.map((t) => t.trim()).filter(Boolean)
+        : [],
+    } as CheckIn;
     const next = { ...get().checkIns, [id]: entry };
     set({ checkIns: next });
     await persistStore(
@@ -276,6 +310,43 @@ export const useAppStore = create<AppStore>((set, get) => ({
       get().showQuotes,
       get().widgetConfig,
     );
+
+    try {
+      const notif = await loadNotificationSettings();
+      if (notif.enabled && notif.mode === "smart") {
+        const createdAtList = Object.values(next)
+          .map((ci) => ci.createdAt)
+          .filter((ts) => Number.isFinite(ts));
+        const smart = computeSmartReminderTime(
+          createdAtList,
+          notif.hour,
+          notif.minute,
+        );
+        const changed = smart.hour !== notif.hour || smart.minute !== notif.minute;
+        if (changed) {
+          const updated = { ...notif, hour: smart.hour, minute: smart.minute };
+          await saveNotificationSettings(updated);
+          await scheduleDailyNotification(smart.hour, smart.minute);
+        }
+      }
+    } catch {
+      // non-fatal
+    }
+
+    // Sync latest check-in to home screen widget
+    try {
+      const streak = calcStreak(next);
+      await saveWidgetData({
+        mood: entry.mood,
+        insight: entry.insight,
+        date: entry.date,
+        streak,
+        photoUri: entry.photoUri,
+      });
+      await requestWidgetUpdate();
+    } catch {
+      // non-fatal
+    }
   },
 
   // Deletes by unique id  never touches other entries on the same day
@@ -288,6 +359,57 @@ export const useAppStore = create<AppStore>((set, get) => ({
       get().customMoods,
       get().showQuotes,
       get().widgetConfig,
+    );
+  },
+
+  replaceAllData: async (nextData) => {
+    if (!nextData || typeof nextData !== "object") {
+      throw new Error("Invalid backup payload.");
+    }
+
+    const rawCheckIns = (nextData as { checkIns?: unknown }).checkIns;
+    if (!rawCheckIns || typeof rawCheckIns !== "object" || Array.isArray(rawCheckIns)) {
+      throw new Error("Invalid backup payload: checkIns is missing or malformed.");
+    }
+
+    const rawStartDate = (nextData as { startDate?: unknown }).startDate;
+    if (
+      rawStartDate !== undefined &&
+      rawStartDate !== null &&
+      (typeof rawStartDate !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(rawStartDate))
+    ) {
+      throw new Error("Invalid backup payload: startDate format is invalid.");
+    }
+
+    const checkIns = migrateCheckIns(rawCheckIns as Record<string, unknown>);
+    const customMoods =
+      Array.isArray(nextData.customMoods) && nextData.customMoods.length > 0
+        ? nextData.customMoods
+        : DEFAULT_MOODS;
+    const showQuotes =
+      typeof nextData.showQuotes === "boolean" ? nextData.showQuotes : true;
+    const rawConfig = (
+      Array.isArray(nextData.widgetConfig) ? nextData.widgetConfig : []
+    ).filter((w) =>
+      (DEFAULT_WIDGET_CONFIG as { id: string }[]).some((d) => d.id === w.id),
+    );
+    const existingIds = new Set(rawConfig.map((w) => w.id));
+    const widgetConfig: WidgetConfig[] =
+      rawConfig.length > 0
+        ? [
+            ...rawConfig,
+            ...DEFAULT_WIDGET_CONFIG.filter((d) => !existingIds.has(d.id)),
+          ]
+        : DEFAULT_WIDGET_CONFIG;
+    const startDate = typeof rawStartDate === "string" ? rawStartDate : null;
+
+    set({ startDate, checkIns, customMoods, showQuotes, widgetConfig });
+    await persistStore(
+      checkIns,
+      startDate,
+      customMoods,
+      showQuotes,
+      widgetConfig,
     );
   },
 }));
@@ -307,30 +429,38 @@ export function useAppData() {
   const setWidgetConfigAction = useAppStore((s) => s.setWidgetConfig);
   const saveCheckInAction = useAppStore((s) => s.saveCheckIn);
   const deleteCheckInAction = useAppStore((s) => s.deleteCheckIn);
+  const replaceAllDataAction = useAppStore((s) => s.replaceAllData);
 
-  const today = todayStr();
+  const today = localDateStr();
 
-  const checkInList: CheckIn[] = Object.values(checkIns)
-    .filter((ci): ci is CheckIn => !!ci && typeof ci.date === "string")
-    .sort((a, b) => b.createdAt - a.createdAt);
+  const checkInList = useMemo<CheckIn[]>(
+    () =>
+      Object.values(checkIns)
+        .filter((ci): ci is CheckIn => !!ci && typeof ci.date === "string")
+        .sort((a, b) => b.createdAt - a.createdAt),
+    [checkIns],
+  );
 
-  // All entries for today, newest first
-  const todayCheckIns = checkInList.filter((ci) => ci.date === today);
-  // Latest today entry (or null)  kept for backward compat
+  const todayCheckIns = useMemo(
+    () => checkInList.filter((ci) => ci.date === today),
+    [checkInList, today],
+  );
   const todayCheckIn = todayCheckIns[0] ?? null;
 
-  const daysSingle = startDate ? daysBetween(startDate, today) : 0;
-  const streak = calcStreak(checkIns);
+  const daysSingle = useMemo(
+    () => (startDate ? daysBetween(startDate, today) : 0),
+    [startDate, today],
+  );
+  const streak = useMemo(() => calcStreak(checkIns), [checkIns]);
+
+  const data = useMemo<AppData>(
+    () => ({ startDate, checkIns, customMoods, showQuotes, widgetConfig }),
+    [startDate, checkIns, customMoods, showQuotes, widgetConfig],
+  );
 
   return {
     loading,
-    data: {
-      startDate,
-      checkIns,
-      customMoods,
-      showQuotes,
-      widgetConfig,
-    } as AppData,
+    data,
     todayCheckIn,
     todayCheckIns,
     daysSingle,
@@ -345,10 +475,8 @@ export function useAppData() {
     setWidgetConfig: setWidgetConfigAction,
     saveCheckIn: saveCheckInAction,
     deleteCheckIn: deleteCheckInAction,
+    replaceAllData: replaceAllDataAction,
     reload: initialize,
   };
 }
 
-export function AppDataProvider({ children }: { children: React.ReactNode }) {
-  return React.createElement(React.Fragment, null, children);
-}

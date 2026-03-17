@@ -6,6 +6,7 @@ import {
   Alert,
   Pressable,
   ScrollView,
+  Share,
   StatusBar,
   StyleSheet,
   Switch,
@@ -25,10 +26,20 @@ import {
 import {
   NotificationSettings,
   cancelDailyNotification,
+  computeSmartReminderTime,
   loadNotificationSettings,
   saveNotificationSettings,
   scheduleDailyNotification,
 } from "@/hooks/use-notifications";
+import {
+  clearDriveSession,
+  connectGoogleDrive,
+  downloadBackupFromDrive,
+  driveErrorMessage,
+  isDriveConnected,
+  isGoogleDriveConfigured,
+  uploadBackupToDrive,
+} from "@/hooks/use-drive-backup";
 
 function pad(n: number) {
   return String(n).padStart(2, "0");
@@ -77,35 +88,59 @@ export default function SettingsScreen() {
     setCustomMoods,
     widgetConfig,
     setWidgetConfig,
+    replaceAllData,
+    checkInList,
   } = useAppData();
 
   const [newMood, setNewMood] = useState("");
   const [localWidgets, setLocalWidgets] =
     useState<WidgetConfig[]>(widgetConfig);
+  const [backupJson, setBackupJson] = useState("");
+  const [driveConfigured] = useState(isGoogleDriveConfigured());
+  const [driveConnected, setDriveConnected] = useState(false);
+  const [driveBusy, setDriveBusy] = useState(false);
 
   // Notification settings
   const [notifEnabled, setNotifEnabled] = useState(false);
   const [notifHour, setNotifHour] = useState(21);
   const [notifMinute, setNotifMinute] = useState(0);
+  const [notifMode, setNotifMode] = useState<"manual" | "smart">("manual");
 
   useEffect(() => {
     loadNotificationSettings().then((s) => {
       setNotifEnabled(s.enabled);
       setNotifHour(s.hour);
       setNotifMinute(s.minute);
+      setNotifMode(s.mode ?? "manual");
     });
+    isDriveConnected().then(setDriveConnected);
   }, []);
 
   const handleNotifToggle = async (val: boolean) => {
     setNotifEnabled(val);
+
+    const createdAtList = checkInList.map((ci) => ci.createdAt);
+    const smart =
+      notifMode === "smart"
+        ? computeSmartReminderTime(createdAtList, notifHour, notifMinute)
+        : { hour: notifHour, minute: notifMinute };
+
+    const nextHour = smart.hour;
+    const nextMinute = smart.minute;
+    if (notifMode === "smart") {
+      setNotifHour(nextHour);
+      setNotifMinute(nextMinute);
+    }
+
     const settings: NotificationSettings = {
       enabled: val,
-      hour: notifHour,
-      minute: notifMinute,
+      hour: nextHour,
+      minute: nextMinute,
+      mode: notifMode,
     };
     await saveNotificationSettings(settings);
     if (val) {
-      const ok = await scheduleDailyNotification(notifHour, notifMinute);
+      const ok = await scheduleDailyNotification(nextHour, nextMinute);
       if (!ok) {
         setNotifEnabled(false);
         await saveNotificationSettings({ ...settings, enabled: false });
@@ -123,6 +158,7 @@ export default function SettingsScreen() {
     field: "hour" | "minute",
     value: number,
   ) => {
+    if (notifMode === "smart") return;
     const newHour = field === "hour" ? value : notifHour;
     const newMinute = field === "minute" ? value : notifMinute;
     if (field === "hour") setNotifHour(value);
@@ -131,10 +167,38 @@ export default function SettingsScreen() {
       enabled: notifEnabled,
       hour: newHour,
       minute: newMinute,
+      mode: notifMode,
     };
     await saveNotificationSettings(settings);
     if (notifEnabled) {
       await scheduleDailyNotification(newHour, newMinute);
+    }
+  };
+
+  const handleNotifModeToggle = async (val: boolean) => {
+    const mode: "manual" | "smart" = val ? "smart" : "manual";
+    setNotifMode(mode);
+
+    const createdAtList = checkInList.map((ci) => ci.createdAt);
+    const smart = computeSmartReminderTime(createdAtList, notifHour, notifMinute);
+    const nextHour = mode === "smart" ? smart.hour : notifHour;
+    const nextMinute = mode === "smart" ? smart.minute : notifMinute;
+
+    if (mode === "smart") {
+      setNotifHour(nextHour);
+      setNotifMinute(nextMinute);
+    }
+
+    const settings: NotificationSettings = {
+      enabled: notifEnabled,
+      hour: nextHour,
+      minute: nextMinute,
+      mode,
+    };
+    await saveNotificationSettings(settings);
+
+    if (notifEnabled) {
+      await scheduleDailyNotification(nextHour, nextMinute);
     }
   };
 
@@ -178,11 +242,181 @@ export default function SettingsScreen() {
           style: "destructive",
           onPress: async () => {
             await AsyncStorage.clear();
+            await replaceAllData({
+              startDate: null,
+              checkIns: {},
+              customMoods: [],
+              showQuotes: true,
+              widgetConfig: [],
+            });
             router.back();
           },
         },
       ],
     );
+  };
+
+  const handleDriveConnect = async () => {
+    if (!driveConfigured) {
+      Alert.alert(
+        "Google Drive not configured",
+        "Set expo.extra.googleDrive client IDs in app.json first.",
+      );
+      return;
+    }
+    setDriveBusy(true);
+    try {
+      await connectGoogleDrive();
+      setDriveConnected(true);
+      Alert.alert("Connected", "Google Drive has been linked.");
+    } catch (e) {
+      Alert.alert("Connect failed", driveErrorMessage(e));
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveDisconnect = async () => {
+    setDriveBusy(true);
+    try {
+      await clearDriveSession();
+      setDriveConnected(false);
+      Alert.alert("Disconnected", "Google Drive connection was removed.");
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveBackup = async () => {
+    if (!driveConnected) {
+      Alert.alert("Not connected", "Connect Google Drive first.");
+      return;
+    }
+    setDriveBusy(true);
+    try {
+      await uploadBackupToDrive(data);
+      Alert.alert("Backup complete", "Your data was uploaded to Google Drive.");
+    } catch (e) {
+      Alert.alert("Backup failed", driveErrorMessage(e));
+    } finally {
+      setDriveBusy(false);
+    }
+  };
+
+  const handleDriveRestore = async () => {
+    if (!driveConnected) {
+      Alert.alert("Not connected", "Connect Google Drive first.");
+      return;
+    }
+    // Confirmation dialog before overwriting local data
+    Alert.alert(
+      "Restore from Drive?",
+      "This will overwrite all your current data with the backup from Google Drive. This cannot be undone.",
+      [
+        { text: "Cancel", style: "cancel" },
+        {
+          text: "Restore",
+          style: "destructive",
+          onPress: async () => {
+            setDriveBusy(true);
+            try {
+              const payload = await downloadBackupFromDrive();
+              const imported = payload.data as {
+                startDate?: string | null;
+                checkIns?: Record<string, unknown>;
+                customMoods?: string[];
+                showQuotes?: boolean;
+                widgetConfig?: WidgetConfig[];
+              };
+
+              await replaceAllData({
+                startDate:
+                  typeof imported.startDate === "string" ? imported.startDate : null,
+                checkIns: (imported.checkIns as any) ?? {},
+                customMoods: Array.isArray(imported.customMoods)
+                  ? imported.customMoods
+                  : [],
+                showQuotes:
+                  typeof imported.showQuotes === "boolean" ? imported.showQuotes : true,
+                widgetConfig: Array.isArray(imported.widgetConfig)
+                  ? imported.widgetConfig
+                  : [],
+              });
+
+              Alert.alert("Restore complete", "Data restored from Google Drive.");
+            } catch (e) {
+              Alert.alert("Restore failed", driveErrorMessage(e));
+            } finally {
+              setDriveBusy(false);
+            }
+          },
+        },
+      ],
+    );
+  };
+
+  const handleExportBackup = async () => {
+    try {
+      const payload = {
+        version: 1,
+        exportedAt: new Date().toISOString(),
+        data,
+      };
+      await Share.share({
+        message: JSON.stringify(payload, null, 2),
+      });
+    } catch {
+      Alert.alert("Export failed", "Could not export your backup.");
+    }
+  };
+
+  const handleImportBackup = async () => {
+    try {
+      const raw = backupJson.trim();
+      if (!raw) {
+        Alert.alert("Missing JSON", "Paste backup JSON first.");
+        return;
+      }
+      const parsed = JSON.parse(raw) as {
+        data?: unknown;
+        startDate?: unknown;
+        checkIns?: unknown;
+        customMoods?: unknown;
+        showQuotes?: unknown;
+        widgetConfig?: unknown;
+      };
+      const imported = (parsed.data ?? parsed) as {
+        startDate?: string | null;
+        checkIns?: Record<string, unknown>;
+        customMoods?: string[];
+        showQuotes?: boolean;
+        widgetConfig?: WidgetConfig[];
+      };
+
+      if (!imported || typeof imported !== "object" || !imported.checkIns) {
+        Alert.alert("Invalid backup", "JSON does not match backup format.");
+        return;
+      }
+
+      await replaceAllData({
+        startDate:
+          typeof imported.startDate === "string" ? imported.startDate : null,
+        checkIns: (imported.checkIns as any) ?? {},
+        customMoods: Array.isArray(imported.customMoods)
+          ? imported.customMoods
+          : [],
+        showQuotes:
+          typeof imported.showQuotes === "boolean" ? imported.showQuotes : true,
+        widgetConfig: Array.isArray(imported.widgetConfig)
+          ? imported.widgetConfig
+          : [],
+      });
+
+      setBackupJson("");
+      Alert.alert("Imported", "Backup has been restored.");
+    } catch {
+      Alert.alert("Import failed", "Backup JSON is invalid.");
+    }
   };
 
   function StepControl({
@@ -305,12 +539,32 @@ export default function SettingsScreen() {
                 thumbColor={Palette.accent}
               />
             </View>
+            <View style={styles.toggleRow}>
+              <View style={{ flex: 1, gap: 2 }}>
+                <Text style={styles.cardTitleSmall}>Smart time</Text>
+                <Text style={styles.cardSubtitle}>
+                  Learn your check-in habit and auto-adjust reminder
+                </Text>
+              </View>
+              <Switch
+                value={notifMode === "smart"}
+                onValueChange={handleNotifModeToggle}
+                trackColor={{
+                  false: Palette.surfaceDark,
+                  true: Palette.highlight,
+                }}
+                thumbColor={Palette.accent}
+              />
+            </View>
+
             {notifEnabled && (
+              <View>
               <View style={styles.notifTimeRow}>
                 <View style={styles.notifTimeBlock}>
                   <Pressable
                     style={({ pressed }) => [
                       styles.notifStepBtn,
+                      notifMode === "smart" && styles.notifStepBtnDisabled,
                       pressed && { opacity: 0.6 },
                     ]}
                     hitSlop={8}
@@ -320,6 +574,7 @@ export default function SettingsScreen() {
                         notifHour === 23 ? 0 : notifHour + 1,
                       )
                     }
+                    disabled={notifMode === "smart"}
                   >
                     <Ionicons
                       name="chevron-up"
@@ -333,6 +588,7 @@ export default function SettingsScreen() {
                   <Pressable
                     style={({ pressed }) => [
                       styles.notifStepBtn,
+                      notifMode === "smart" && styles.notifStepBtnDisabled,
                       pressed && { opacity: 0.6 },
                     ]}
                     hitSlop={8}
@@ -342,6 +598,7 @@ export default function SettingsScreen() {
                         notifHour === 0 ? 23 : notifHour - 1,
                       )
                     }
+                    disabled={notifMode === "smart"}
                   >
                     <Ionicons
                       name="chevron-down"
@@ -355,6 +612,7 @@ export default function SettingsScreen() {
                   <Pressable
                     style={({ pressed }) => [
                       styles.notifStepBtn,
+                      notifMode === "smart" && styles.notifStepBtnDisabled,
                       pressed && { opacity: 0.6 },
                     ]}
                     hitSlop={8}
@@ -364,6 +622,7 @@ export default function SettingsScreen() {
                         notifMinute >= 55 ? 0 : notifMinute + 5,
                       )
                     }
+                    disabled={notifMode === "smart"}
                   >
                     <Ionicons
                       name="chevron-up"
@@ -377,6 +636,7 @@ export default function SettingsScreen() {
                   <Pressable
                     style={({ pressed }) => [
                       styles.notifStepBtn,
+                      notifMode === "smart" && styles.notifStepBtnDisabled,
                       pressed && { opacity: 0.6 },
                     ]}
                     hitSlop={8}
@@ -386,6 +646,7 @@ export default function SettingsScreen() {
                         notifMinute === 0 ? 55 : notifMinute - 5,
                       )
                     }
+                    disabled={notifMode === "smart"}
                   >
                     <Ionicons
                       name="chevron-down"
@@ -394,6 +655,12 @@ export default function SettingsScreen() {
                     />
                   </Pressable>
                 </View>
+              </View>
+              {notifMode === "smart" ? (
+                <Text style={styles.smartHint}>
+                  Smart mode updates this time from your recent check-ins.
+                </Text>
+              ) : null}
               </View>
             )}
           </View>
@@ -571,6 +838,116 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          {/* Google Drive */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Google Drive cloud</Text>
+            <Text style={styles.cardSubtitle}>
+              {driveConfigured
+                ? driveConnected
+                  ? "Connected. You can backup/restore via Drive appData folder."
+                  : "Connect Google Drive to enable cloud backup."
+                : "Add Google OAuth client IDs in app.json to enable Drive."}
+            </Text>
+
+            <View style={styles.driveRow}>
+              {!driveConnected ? (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.backupBtn,
+                    pressed && { opacity: 0.8 },
+                    driveBusy && { opacity: 0.5 },
+                  ]}
+                  onPress={handleDriveConnect}
+                  disabled={driveBusy}
+                >
+                  <Ionicons name="logo-google" size={16} color={Palette.bgDark} />
+                  <Text style={styles.backupBtnText}>Connect Google</Text>
+                </Pressable>
+              ) : (
+                <Pressable
+                  style={({ pressed }) => [
+                    styles.importBtn,
+                    pressed && { opacity: 0.8 },
+                    driveBusy && { opacity: 0.5 },
+                  ]}
+                  onPress={handleDriveDisconnect}
+                  disabled={driveBusy}
+                >
+                  <Ionicons name="log-out-outline" size={16} color={Palette.accent} />
+                  <Text style={styles.importBtnText}>Disconnect</Text>
+                </Pressable>
+              )}
+            </View>
+
+            <View style={styles.driveActions}>
+              <Pressable
+                style={({ pressed }) => [
+                  styles.driveActionBtn,
+                  pressed && { opacity: 0.8 },
+                  (!driveConnected || driveBusy) && { opacity: 0.45 },
+                ]}
+                onPress={handleDriveBackup}
+                disabled={!driveConnected || driveBusy}
+              >
+                <Ionicons name="cloud-upload-outline" size={16} color={Palette.accent} />
+                <Text style={styles.driveActionText}>Backup to Drive</Text>
+              </Pressable>
+
+              <Pressable
+                style={({ pressed }) => [
+                  styles.driveActionBtn,
+                  pressed && { opacity: 0.8 },
+                  (!driveConnected || driveBusy) && { opacity: 0.45 },
+                ]}
+                onPress={handleDriveRestore}
+                disabled={!driveConnected || driveBusy}
+              >
+                <Ionicons name="cloud-download-outline" size={16} color={Palette.accent} />
+                <Text style={styles.driveActionText}>Restore from Drive</Text>
+              </Pressable>
+            </View>
+          </View>
+
+          {/* Backup */}
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>Backup & restore</Text>
+            <Text style={styles.cardSubtitle}>
+              Export your data as JSON or paste JSON to restore.
+            </Text>
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.backupBtn,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={handleExportBackup}
+            >
+              <Ionicons name="download-outline" size={16} color={Palette.bgDark} />
+              <Text style={styles.backupBtnText}>Export backup JSON</Text>
+            </Pressable>
+
+            <TextInput
+              style={styles.backupInput}
+              placeholder="Paste backup JSON here..."
+              placeholderTextColor={`${Palette.secondary}66`}
+              value={backupJson}
+              onChangeText={setBackupJson}
+              multiline
+              textAlignVertical="top"
+            />
+
+            <Pressable
+              style={({ pressed }) => [
+                styles.importBtn,
+                pressed && { opacity: 0.8 },
+              ]}
+              onPress={handleImportBackup}
+            >
+              <Ionicons name="cloud-upload-outline" size={16} color={Palette.accent} />
+              <Text style={styles.importBtnText}>Import backup</Text>
+            </Pressable>
+          </View>
+
           {/* About */}
           <View style={styles.card}>
             <Text style={styles.cardTitle}>Single?</Text>
@@ -633,6 +1010,7 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   cardTitle: { fontSize: 17, fontWeight: "600", color: Palette.accent },
+  cardTitleSmall: { fontSize: 14, fontWeight: "600", color: Palette.accent },
   cardSubtitle: {
     fontSize: 13,
     color: Palette.secondary,
@@ -807,6 +1185,9 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
+  notifStepBtnDisabled: {
+    opacity: 0.35,
+  },
   notifTimeValue: {
     fontSize: 34,
     fontWeight: "200",
@@ -821,5 +1202,79 @@ const styles = StyleSheet.create({
     color: `${Palette.secondary}60`,
     marginBottom: 4,
     paddingHorizontal: 4,
+  },
+  smartHint: {
+    marginTop: 8,
+    fontSize: 12,
+    color: `${Palette.secondary}88`,
+  },
+  backupBtn: {
+    marginTop: 8,
+    height: 42,
+    borderRadius: 12,
+    backgroundColor: Palette.highlight,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  backupBtnText: {
+    color: Palette.bgDark,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  backupInput: {
+    marginTop: 10,
+    minHeight: 120,
+    borderRadius: 14,
+    borderWidth: 1,
+    borderColor: Palette.border,
+    backgroundColor: `${Palette.bgDark}AA`,
+    color: Palette.accent,
+    padding: 12,
+    fontSize: 12,
+    lineHeight: 18,
+  },
+  importBtn: {
+    marginTop: 10,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: `${Palette.accent}35`,
+    backgroundColor: `${Palette.accent}12`,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  importBtnText: {
+    color: Palette.accent,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+  driveRow: {
+    marginTop: 10,
+  },
+  driveActions: {
+    marginTop: 10,
+    flexDirection: "row",
+    gap: 10,
+  },
+  driveActionBtn: {
+    flex: 1,
+    height: 40,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: `${Palette.accent}35`,
+    backgroundColor: `${Palette.accent}12`,
+    alignItems: "center",
+    justifyContent: "center",
+    flexDirection: "row",
+    gap: 8,
+  },
+  driveActionText: {
+    color: Palette.accent,
+    fontSize: 12,
+    fontWeight: "700",
   },
 });

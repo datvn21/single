@@ -8,12 +8,14 @@ export interface NotificationSettings {
   enabled: boolean;
   hour: number; // 0-23
   minute: number; // 0-59
+  mode: "manual" | "smart";
 }
 
 const DEFAULT_SETTINGS: NotificationSettings = {
   enabled: false,
   hour: 21,
   minute: 0,
+  mode: "manual",
 };
 
 // Configure how notifications appear when the app is in the foreground
@@ -41,6 +43,52 @@ export async function saveNotificationSettings(
   settings: NotificationSettings,
 ): Promise<void> {
   await AsyncStorage.setItem(NOTIF_KEY, JSON.stringify(settings));
+}
+
+function roundToNearestFive(minute: number): number {
+  return Math.max(0, Math.min(55, Math.round(minute / 5) * 5));
+}
+
+export function computeSmartReminderTime(
+  createdAtList: number[],
+  fallbackHour = DEFAULT_SETTINGS.hour,
+  fallbackMinute = DEFAULT_SETTINGS.minute,
+): { hour: number; minute: number } {
+  if (!Array.isArray(createdAtList) || createdAtList.length === 0) {
+    return { hour: fallbackHour, minute: fallbackMinute };
+  }
+
+  const recent = [...createdAtList]
+    .filter((v) => Number.isFinite(v))
+    .sort((a, b) => b - a)
+    .slice(0, 30);
+
+  if (recent.length === 0) {
+    return { hour: fallbackHour, minute: fallbackMinute };
+  }
+
+  const hourScore = new Map<number, number>();
+  for (let i = 0; i < recent.length; i += 1) {
+    const d = new Date(recent[i]);
+    const h = d.getHours();
+    const weight = recent.length - i;
+    hourScore.set(h, (hourScore.get(h) ?? 0) + weight);
+  }
+
+  const bestHour = [...hourScore.entries()].sort((a, b) => b[1] - a[1])[0]?.[0];
+  const hour = typeof bestHour === "number" ? bestHour : fallbackHour;
+
+  const minuteSamples = recent
+    .map((ts) => new Date(ts))
+    .filter((d) => d.getHours() === hour)
+    .map((d) => d.getMinutes());
+
+  const minuteAvg =
+    minuteSamples.length > 0
+      ? Math.round(minuteSamples.reduce((sum, m) => sum + m, 0) / minuteSamples.length)
+      : fallbackMinute;
+
+  return { hour, minute: roundToNearestFive(minuteAvg) };
 }
 
 async function requestPermissions(): Promise<boolean> {

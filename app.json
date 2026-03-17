@@ -3,7 +3,6 @@
     "name": "Single?",
     "slug": "single",
     "version": "1.0.2",
-
     "orientation": "portrait",
     "icon": "./assets/images/icon.png",
     "scheme": "single",
@@ -63,7 +62,23 @@
           "savePhotosPermission": "Allow Single to save photos to your library.",
           "isAccessMediaLocationEnabled": true
         }
-      ]
+      ],
+      ["react-native-android-widget", {
+        "widgets": [
+          {
+            "name": "SingleWidget",
+            "label": "Single? Check-in",
+            "description": "Hiển thị check-in mới nhất",
+            "minWidth": "250dp",
+            "minHeight": "110dp",
+            "targetCellWidth": 4,
+            "targetCellHeight": 2,
+            "resizeMode": "horizontal|vertical",
+            "widgetFeatures": "reconfigurable",
+            "updatePeriodMillis": 1800000
+          }
+        ]
+      }]
     ],
     "experiments": {
       "typedRoutes": true,
@@ -73,6 +88,12 @@
       "router": {},
       "eas": {
         "projectId": "fbbe28e1-9b16-44a0-8d05-432aa29c32f9"
+      },
+      "googleDrive": {
+        "webClientId": "490870699972-0vi8e7079pjd6f8ad6g8bib924ps5to4.apps.googleusercontent.com",
+        "iosClientId": "",
+        "androidClientId": "490870699972-s1psacrtpots29lp2sdhne5e9sjkqls0.apps.googleusercontent.com",
+        "expoClientId": "490870699972-0vi8e7079pjd6f8ad6g8bib924ps5to4.apps.googleusercontent.com"
       }
     }
   }

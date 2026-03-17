@@ -9,7 +9,7 @@ import {
   useAudioRecorderState,
 } from "expo-audio";
 import * as ImagePicker from "expo-image-picker";
-import { useRouter } from "expo-router";
+import { useLocalSearchParams, useRouter } from "expo-router";
 import React, { useEffect, useRef, useState } from "react";
 import {
   Alert,
@@ -29,7 +29,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 
 import { Palette } from "@/constants/theme";
-import { localDateStr, useAppData } from "@/hooks/use-app-data";
+import { CheckIn, localDateStr, useAppData } from "@/hooks/use-app-data";
 
 function formatRecSecs(s: number) {
   const m = Math.floor(s / 60);
@@ -37,12 +37,29 @@ function formatRecSecs(s: number) {
   return `${m}:${sec.toString().padStart(2, "0")}`;
 }
 
+function parseTags(input: string): string[] {
+  const unique = new Set<string>();
+  input
+    .split(/[\s,]+/)
+    .map((raw) => raw.replace(/^#/, "").trim().toLowerCase())
+    .filter(Boolean)
+    .forEach((tag) => unique.add(tag));
+  return Array.from(unique).slice(0, 8);
+}
+
 export default function ModalScreen() {
   const router = useRouter();
-  const { saveCheckIn, customMoods } = useAppData();
+  const params = useLocalSearchParams<{ editId?: string }>();
+  const { saveCheckIn, customMoods, checkInList } = useAppData();
+  const editId = typeof params.editId === "string" ? params.editId : null;
+  const editingEntry: CheckIn | null = editId
+    ? checkInList.find((ci) => ci.id === editId) ?? null
+    : null;
+  const isEditMode = !!editingEntry;
 
   const [mood, setMood] = useState<string | null>(null);
   const [insight, setInsight] = useState("");
+  const [tagsText, setTagsText] = useState("");
   const [photoUri, setPhotoUri] = useState<string | undefined>(undefined);
   const [saving, setSaving] = useState(false);
 
@@ -56,6 +73,16 @@ export default function ModalScreen() {
   // — Audio playback (preview after recording) —
   const playbackRef = useRef<AudioPlayer | null>(null);
   const [isPlayingBack, setIsPlayingBack] = useState(false);
+
+  useEffect(() => {
+    if (!editingEntry) return;
+    setMood(editingEntry.mood);
+    setInsight(editingEntry.insight ?? "");
+    setTagsText((editingEntry.tags ?? []).map((t) => `#${t}`).join(" "));
+    setPhotoUri(editingEntry.photoUri);
+    setAudioUri(editingEntry.audioUri);
+    setRecDuration(0);
+  }, [editingEntry]);
 
   useEffect(() => {
     playbackRef.current?.remove();
@@ -187,13 +214,15 @@ export default function ModalScreen() {
     }
     setSaving(true);
     try {
-      const today = localDateStr();
-      const createdAt = Date.now();
+      const date = editingEntry?.date ?? localDateStr();
+      const createdAt = editingEntry?.createdAt ?? Date.now();
+      const id = editingEntry?.id ?? `${date}_${createdAt}`;
       await saveCheckIn({
-        id: `${today}_${createdAt}`,
-        date: today,
+        id,
+        date,
         mood,
         insight: insight.trim(),
+        tags: parseTags(tagsText),
         photoUri,
         audioUri,
         createdAt,
@@ -222,7 +251,7 @@ export default function ModalScreen() {
             >
               <Ionicons name="close" size={22} color={Palette.accent} />
             </Pressable>
-            <Text style={styles.headerTitle}>DAILY INSIGHT</Text>
+            <Text style={styles.headerTitle}>{isEditMode ? "EDIT INSIGHT" : "DAILY INSIGHT"}</Text>
             <View style={{ width: 36 }} />
           </View>
 
@@ -235,7 +264,7 @@ export default function ModalScreen() {
           >
             {/* Question */}
             <Text style={styles.question}>
-              How are you{"\n"}
+              {isEditMode ? "How were you" : "How are you"}{"\n"}
               <Text style={styles.questionAccent}>feeling today?</Text>
             </Text>
 
@@ -274,7 +303,7 @@ export default function ModalScreen() {
 
             {/* Photo Section */}
             <View style={styles.photoSection}>
-              <Text style={styles.sectionLabel}>TODAY'S PHOTO</Text>
+              <Text style={styles.sectionLabel}>TODAY{"'"}S PHOTO</Text>
               {photoUri ? (
                 <View style={styles.photoPreviewWrap}>
                   <Image
@@ -329,6 +358,21 @@ export default function ModalScreen() {
                 multiline
                 maxLength={300}
                 textAlignVertical="top"
+              />
+            </View>
+
+            {/* Tags */}
+            <View style={styles.tagSection}>
+              <Text style={styles.sectionLabel}>TAGS</Text>
+              <TextInput
+                style={styles.tagInput}
+                placeholder="#work #health #gratitude"
+                placeholderTextColor={`${Palette.secondary}60`}
+                value={tagsText}
+                onChangeText={setTagsText}
+                autoCapitalize="none"
+                autoCorrect={false}
+                maxLength={120}
               />
             </View>
 
@@ -431,7 +475,7 @@ export default function ModalScreen() {
               disabled={saving}
             >
               <Text style={styles.saveBtnText}>
-                {saving ? "Saving..." : "Save Insight"}
+                {saving ? "Saving..." : isEditMode ? "Update Insight" : "Save Insight"}
               </Text>
               <Ionicons name="arrow-forward" size={20} color={Palette.bgDark} />
             </Pressable>
@@ -553,8 +597,18 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: "500",
   },
-  insightSection: { marginBottom: 28 },
-  insightInputWrap: {},
+  insightSection: { marginBottom: 22 },
+  tagSection: { marginBottom: 28 },
+  tagInput: {
+    backgroundColor: Palette.surfaceDark,
+    borderWidth: 1,
+    borderColor: `${Palette.primary}40`,
+    borderRadius: 14,
+    paddingHorizontal: 14,
+    paddingVertical: 12,
+    color: Palette.accent,
+    fontSize: 14,
+  },
   insightInput: {
     backgroundColor: Palette.surfaceDark,
     borderWidth: 1,
@@ -567,11 +621,6 @@ const styles = StyleSheet.create({
     minHeight: 100,
   },
   voiceSection: { marginBottom: 32 },
-  micRow: {
-    marginTop: 10,
-    flexDirection: "row",
-    alignItems: "center",
-  },
   micBtnWrap: {
     flexDirection: "row",
     alignItems: "center",
@@ -652,12 +701,6 @@ const styles = StyleSheet.create({
   },
   audioPillPlay: {
     padding: 2,
-  },
-  audioPillText: {
-    color: Palette.accent,
-    fontSize: 13,
-    fontWeight: "500",
-    flex: 1,
   },
   saveBtn: {
     flexDirection: "row",

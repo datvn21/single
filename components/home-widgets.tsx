@@ -14,7 +14,7 @@ import { CheckIn, WidgetId, localDateStr } from "@/hooks/use-app-data";
 
 // ── Count-up hook ─────────────────────────────────────────────────────────────
 
-function useCountUp(target: number, duration = 800): number {
+export function useCountUp(target: number, duration = 800): number {
   const [display, setDisplay] = useState(0);
   const timerRef = useRef<ReturnType<typeof setInterval> | null>(null);
 
