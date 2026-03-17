@@ -69,12 +69,11 @@
             "name": "SingleWidget",
             "label": "Single? Check-in",
             "description": "Hiển thị check-in mới nhất",
-            "minWidth": "250dp",
+            "minWidth": "110dp",
             "minHeight": "110dp",
-            "targetCellWidth": 4,
+            "targetCellWidth": 2,
             "targetCellHeight": 2,
-            "resizeMode": "horizontal|vertical",
-            "widgetFeatures": "reconfigurable",
+            "resizeMode": "none",
             "updatePeriodMillis": 1800000
           }
         ]

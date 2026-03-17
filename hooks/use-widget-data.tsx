@@ -2,6 +2,7 @@ import React from "react";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import type { ImageWidgetSource } from "react-native-android-widget";
+import { SingleWidget, SingleWidgetEmpty } from "../components/single-widget";
 
 const WIDGET_DATA_KEY = "single_widget_data";
 
@@ -47,11 +48,13 @@ export function toWidgetImageSource(
   uri: string | undefined,
 ): ImageWidgetSource | undefined {
   if (!uri) return undefined;
-  // Already supported formats
-  if (uri.startsWith("http:") || uri.startsWith("https:") || uri.startsWith("data:image")) {
+  if (
+    uri.startsWith("http:") ||
+    uri.startsWith("https:") ||
+    uri.startsWith("data:image")
+  ) {
     return uri as ImageWidgetSource;
   }
-  // file:// URIs are not directly supported by ImageWidget — skip for now
   return undefined;
 }
 
@@ -64,9 +67,6 @@ export async function requestWidgetUpdate(): Promise<void> {
     const { requestWidgetUpdate: nativeUpdate } = await import(
       "react-native-android-widget"
     );
-    const { SingleWidget, SingleWidgetEmpty } = await import(
-      "@/components/single-widget"
-    );
 
     const data = await loadWidgetData();
 
@@ -77,8 +77,6 @@ export async function requestWidgetUpdate(): Promise<void> {
           return (
             <SingleWidget
               mood={data.mood}
-              insight={data.insight}
-              date={data.date}
               streak={data.streak}
               photoUri={toWidgetImageSource(data.photoUri)}
             />

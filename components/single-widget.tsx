@@ -11,10 +11,7 @@ import type { ImageWidgetSource } from 'react-native-android-widget';
 
 interface SingleWidgetProps {
   mood?: string;
-  insight?: string;
-  date?: string;
   streak?: number;
-  /** Must be http:, https:, or data:image URI */
   photoUri?: ImageWidgetSource;
 }
 
@@ -23,97 +20,9 @@ const SURFACE = '#0a2e2f';
 const PRIMARY = '#0d3b3c';
 const ACCENT = '#e0f0e3';
 const HIGHLIGHT = '#4caf50';
-const SECONDARY = '#8fa89b';
-
-function StreakBadge({ streak }: { streak: number }) {
-  if (streak <= 0) return null;
-  return (
-    <FlexWidget
-      style={{
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 6,
-        backgroundColor: '#4caf5033',
-        paddingHorizontal: 10,
-        paddingVertical: 4,
-        borderRadius: 12,
-      }}
-    >
-      <TextWidget
-        text={`🔥 ${streak} day streak`}
-        style={{
-          fontSize: 12,
-          color: HIGHLIGHT,
-          fontWeight: '700',
-        }}
-      />
-    </FlexWidget>
-  );
-}
-
-function InfoColumn({
-  date,
-  insight,
-  streak,
-}: {
-  date: string;
-  insight: string;
-  streak: number;
-}) {
-  return (
-    <FlexWidget
-      style={{
-        flex: 1,
-        marginLeft: 14,
-        justifyContent: 'center',
-      }}
-    >
-      <TextWidget
-        text={date}
-        style={{
-          fontSize: 11,
-          color: SECONDARY,
-          fontWeight: '600',
-        }}
-      />
-      {insight ? (
-        <TextWidget
-          text={insight}
-          style={{
-            fontSize: 14,
-            color: ACCENT,
-            marginTop: 3,
-          }}
-          maxLines={2}
-          truncate="END"
-        />
-      ) : null}
-      <StreakBadge streak={streak} />
-    </FlexWidget>
-  );
-}
-
-function MoodCircle({ mood, bg }: { mood: string; bg: `#${string}` }) {
-  return (
-    <FlexWidget
-      style={{
-        width: 64,
-        height: 64,
-        justifyContent: 'center',
-        alignItems: 'center',
-        backgroundColor: bg,
-        borderRadius: 20,
-      }}
-    >
-      <TextWidget text={mood} style={{ fontSize: 32 }} />
-    </FlexWidget>
-  );
-}
 
 export function SingleWidget({
   mood = '😌',
-  insight = '',
-  date = 'Today',
   streak = 0,
   photoUri,
 }: SingleWidgetProps) {
@@ -127,67 +36,121 @@ export function SingleWidget({
         overflow: 'hidden',
       }}
       clickAction="OPEN_APP"
-      clickActionData={{ screen: '/(tabs)' }}
     >
-      {photoUri ? (
-        <OverlapWidget
-          style={{ height: 'match_parent', width: 'match_parent' }}
-        >
+      <OverlapWidget
+        style={{ height: 'match_parent', width: 'match_parent' }}
+      >
+        {/* Layer 1: Photo background (or dark fallback) */}
+        {photoUri ? (
           <ImageWidget
             image={photoUri}
-            imageWidth={400}
-            imageHeight={200}
+            imageWidth={300}
+            imageHeight={300}
             style={{ width: 'match_parent', height: 'match_parent' }}
             radius={24}
           />
-
-          {/* Dark overlay */}
+        ) : (
           <FlexWidget
             style={{
-              height: 'match_parent',
               width: 'match_parent',
-              backgroundColor: '#051f20a6',
+              height: 'match_parent',
+              backgroundColor: SURFACE,
               borderRadius: 24,
             }}
           />
+        )}
 
-          {/* Content */}
-          <FlexWidget
-            style={{
-              height: 'match_parent',
-              width: 'match_parent',
-              flexDirection: 'row',
-              alignItems: 'center',
-              padding: 16,
-            }}
-          >
-            <MoodCircle mood={mood} bg="#ffffff1f" />
-            <InfoColumn date={date} insight={insight} streak={streak} />
-          </FlexWidget>
-        </OverlapWidget>
-      ) : (
+        {/* Layer 2: Gradient-like dark overlay */}
         <FlexWidget
           style={{
             height: 'match_parent',
             width: 'match_parent',
-            flexDirection: 'row',
-            alignItems: 'center',
-            padding: 16,
-            backgroundColor: SURFACE,
+            backgroundColor: '#00000066',
             borderRadius: 24,
-            borderWidth: 1,
-            borderColor: PRIMARY,
+          }}
+        />
+
+        {/* Layer 3: Content overlay */}
+        <FlexWidget
+          style={{
+            height: 'match_parent',
+            width: 'match_parent',
+            borderRadius: 24,
           }}
         >
-          <MoodCircle mood={mood} bg={PRIMARY} />
-          <InfoColumn date={date} insight={insight} streak={streak} />
+          {/* Top row: streak badge top-right */}
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              flexDirection: 'row',
+              justifyContent: 'flex-end',
+              padding: 12,
+            }}
+          >
+            {streak > 0 ? (
+              <FlexWidget
+                style={{
+                  flexDirection: 'row',
+                  alignItems: 'center',
+                  backgroundColor: '#00000099',
+                  paddingHorizontal: 10,
+                  paddingVertical: 5,
+                  borderRadius: 14,
+                }}
+              >
+                <TextWidget
+                  text="🔥"
+                  style={{ fontSize: 14 }}
+                />
+                <TextWidget
+                  text={`${streak}`}
+                  style={{
+                    fontSize: 14,
+                    color: HIGHLIGHT,
+                    fontWeight: '800',
+                    marginLeft: 3,
+                  }}
+                />
+              </FlexWidget>
+            ) : (
+              <FlexWidget style={{ height: 1 }} />
+            )}
+          </FlexWidget>
+
+          {/* Spacer to push mood to bottom */}
+          <FlexWidget style={{ flex: 1 }} />
+
+          {/* Bottom: mood floating center */}
+          <FlexWidget
+            style={{
+              width: 'match_parent',
+              alignItems: 'center',
+              paddingBottom: 14,
+            }}
+          >
+            <FlexWidget
+              style={{
+                backgroundColor: '#00000099',
+                paddingHorizontal: 20,
+                paddingVertical: 8,
+                borderRadius: 20,
+                flexDirection: 'row',
+                alignItems: 'center',
+              }}
+            >
+              <TextWidget
+                text={mood}
+                style={{ fontSize: 24 }}
+              />
+            </FlexWidget>
+          </FlexWidget>
         </FlexWidget>
-      )}
+      </OverlapWidget>
     </FlexWidget>
   );
 }
 
-/** Empty state widget shown when no check-in exists */
+/** Empty state widget */
 export function SingleWidgetEmpty() {
   return (
     <FlexWidget
@@ -202,22 +165,21 @@ export function SingleWidgetEmpty() {
         borderColor: PRIMARY,
       }}
       clickAction="OPEN_APP"
-      clickActionData={{ screen: '/modal' }}
     >
       <TextWidget
         text="Single?"
         style={{
-          fontSize: 22,
+          fontSize: 20,
           color: ACCENT,
           fontWeight: '700',
         }}
       />
       <TextWidget
-        text="Tap to add today's check-in"
+        text="Tap to check in"
         style={{
-          fontSize: 13,
-          color: SECONDARY,
-          marginTop: 6,
+          fontSize: 12,
+          color: '#8fa89b',
+          marginTop: 4,
         }}
       />
     </FlexWidget>
